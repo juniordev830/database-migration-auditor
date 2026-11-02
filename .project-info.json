@@ -1,0 +1,7 @@
+{
+  "name": "database-migration-auditor",
+  "title": "Database Migration Auditor",
+  "stage": "MVP inicial",
+  "owner": "juniordev830",
+  "publishing_requires_authentication": true
+}
