@@ -32,9 +32,24 @@ def audit(sql: str) -> list[dict[str,str]]:
 def main():
     cli=argparse.ArgumentParser(description='Read-only SQL migration audit')
     cli.add_argument('file', help='SQL migration file')
+    cli.add_argument('--fail-on', choices=('high', 'medium', 'low', 'none'), default='high',
+                     help='minimum severity that causes exit code 2 (default: high)')
+    cli.add_argument('--format', choices=('json', 'summary'), default='json',
+                     help='output format (default: json)')
     args=cli.parse_args()
-    sql=Path(args.file).read_text(encoding='utf-8')
+    try:
+        sql=Path(args.file).read_text(encoding='utf-8')
+    except (OSError, UnicodeError) as error:
+        cli.error(f'cannot read migration file: {error}')
     findings=audit(sql)
-    print(json.dumps({'findings':findings,'high_risk':sum(f['severity']=='high' for f in findings)},indent=2))
-    return 2 if any(f['severity']=='high' for f in findings) else 0
+    counts={level:sum(f['severity']==level for f in findings) for level in ('high', 'medium', 'low')}
+    if args.format == 'json':
+        print(json.dumps({'findings':findings,'high_risk':counts['high']},indent=2))
+    else:
+        print(f"Total: {len(findings)} | High: {counts['high']} | Medium: {counts['medium']} | Low: {counts['low']}")
+        for finding in findings:
+            print(f"[{finding['severity'].upper()}] {finding['reason']}: {finding['statement']}")
+    thresholds={'high': 3, 'medium': 2, 'low': 1, 'none': 4}
+    severities={'high': 3, 'medium': 2, 'low': 1}
+    return 2 if any(severities[f['severity']] >= thresholds[args.fail_on] for f in findings) else 0
 if __name__=='__main__':raise SystemExit(main())

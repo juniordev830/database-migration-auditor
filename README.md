@@ -10,7 +10,10 @@ Revisor estático de scripts SQL para identificar comandos destrutivos e atribui
 
 ```bash
 python audit.py examples/migration.sql
+python audit.py examples/migration.sql --format summary --fail-on medium
 ```
+
+Por padrão, a CLI retorna JSON e encerra com código 2 quando encontra risco alto. `--fail-on` aceita `high`, `medium`, `low` ou `none` para definir o limiar do código de saída. `--format summary` apresenta contagens e achados em texto para leitura no terminal.
 
 ## Testes
 
