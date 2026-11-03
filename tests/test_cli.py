@@ -21,6 +21,19 @@ class AuditCliTests(unittest.TestCase):
             self.assertIn('Medium: 1', strict.stdout)
             self.assertIn('Low: 1', strict.stdout)
 
+    def test_sarif_format_contains_findings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            migration = Path(directory) / 'migration.sql'
+            migration.write_text('DROP TABLE users;', encoding='utf-8')
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(migration), '--format', 'sarif'],
+                capture_output=True, text=True
+            )
+            self.assertEqual(result.returncode, 2)
+            report = json.loads(result.stdout)
+            self.assertEqual(report['version'], '2.1.0')
+            self.assertEqual(report['runs'][0]['results'][0]['level'], 'error')
+
     def test_none_does_not_fail_on_high_risk(self):
         with tempfile.TemporaryDirectory() as directory:
             migration = Path(directory) / 'migration.sql'
