@@ -12,7 +12,7 @@ HIGH = [
     (re.compile(r'^DELETE\s+FROM\b(?!.*\bWHERE\b)', re.I|re.S), 'delete without WHERE'),
     (re.compile(r'^UPDATE\b(?!.*\bWHERE\b)', re.I|re.S), 'update without WHERE'),
 ]
-LOW = re.compile(r'^CREATE\\s+(?:TABLE|INDEX|SCHEMA)\\b', re.I)
+LOW = re.compile(r'^CREATE\s+(?:TABLE|INDEX|SCHEMA)\b', re.I)
 
 
 def sarif_report(findings: list[dict[str, str]], artifact: str) -> dict:
