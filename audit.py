@@ -14,6 +14,39 @@ HIGH = [
 ]
 LOW = re.compile(r'^CREATE\s+(?:TABLE|INDEX|SCHEMA)\b', re.I)
 
+
+def sarif_report(findings: list[dict[str, str]], artifact: str) -> dict:
+    """Convert audit findings to SARIF for CI code-scanning annotations."""
+    levels = {'high': 'error', 'medium': 'warning', 'low': 'note'}
+    rules = {}
+    results = []
+    for finding in findings:
+        rule_id = 'SQL-' + re.sub(r'[^A-Z0-9]+', '-', finding['reason'].upper()).strip('-')
+        rules.setdefault(rule_id, {
+            'id': rule_id,
+            'shortDescription': {'text': finding['reason']},
+            'defaultConfiguration': {'level': levels[finding['severity']]},
+        })
+        results.append({
+            'ruleId': rule_id,
+            'level': levels[finding['severity']],
+            'message': {'text': finding['reason']},
+            'locations': [{
+                'physicalLocation': {
+                    'artifactLocation': {'uri': artifact},
+                    'region': {'startLine': 1},
+                }
+            }],
+        })
+    return {
+        '$schema': 'https://json.schemastore.org/sarif-2.1.0.json',
+        'version': '2.1.0',
+        'runs': [{
+            'tool': {'driver': {'name': 'database-migration-auditor', 'rules': list(rules.values())}},
+            'results': results,
+        }],
+    }
+
 def audit(sql: str) -> list[dict[str,str]]:
     # Training parser: SQL comments removed; semicolons in string literals are unsupported.
     cleaned = re.sub(r'/\*.*?\*/|--[^\n]*', '', sql, flags=re.S)
@@ -34,7 +67,7 @@ def main():
     cli.add_argument('file', help='SQL migration file')
     cli.add_argument('--fail-on', choices=('high', 'medium', 'low', 'none'), default='high',
                      help='minimum severity that causes exit code 2 (default: high)')
-    cli.add_argument('--format', choices=('json', 'summary'), default='json',
+    cli.add_argument('--format', choices=('json', 'summary', 'sarif'), default='json',
                      help='output format (default: json)')
     args=cli.parse_args()
     try:
@@ -45,6 +78,8 @@ def main():
     counts={level:sum(f['severity']==level for f in findings) for level in ('high', 'medium', 'low')}
     if args.format == 'json':
         print(json.dumps({'findings':findings,'high_risk':counts['high']},indent=2))
+    elif args.format == 'sarif':
+        print(json.dumps(sarif_report(findings, str(Path(args.file))), indent=2))
     else:
         print(f"Total: {len(findings)} | High: {counts['high']} | Medium: {counts['medium']} | Low: {counts['low']}")
         for finding in findings:
