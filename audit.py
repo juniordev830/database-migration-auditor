@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from sql_lexer import split_sql
 
 HIGH = [
     (re.compile(r'^DROP\s+(?:TABLE|DATABASE|SCHEMA)\b', re.I), 'destructive drop'),
@@ -47,19 +48,19 @@ def sarif_report(findings: list[dict[str, str]], artifact: str) -> dict:
         }],
     }
 
-def audit(sql: str) -> list[dict[str,str]]:
-    # Training parser: SQL comments removed; semicolons in string literals are unsupported.
-    cleaned = re.sub(r'/\*.*?\*/|--[^\n]*', '', sql, flags=re.S)
-    result=[]
-    for raw in cleaned.split(';'):
-        statement=raw.strip()
-        if not statement: continue
-        normalized=' '.join(statement.split())
-        matched=next((reason for pattern,reason in HIGH if pattern.search(normalized)),None)
-        if matched: severity,reason='high',matched
-        elif LOW.search(normalized): severity,reason='low','create-only statement'
-        else: severity,reason='medium','manual review required'
-        result.append({'severity':severity,'reason':reason,'statement':normalized[:160]})
+def audit(sql: str) -> list[dict[str, str]]:
+    # Lexing masks quoted values/identifiers for keyword checks and preserves
+    # semicolons inside strings. This is still not a full SQL grammar parser.
+    result = []
+    for display, keyword_safe in split_sql(sql):
+        matched = next((reason for pattern, reason in HIGH if pattern.search(keyword_safe)), None)
+        if matched:
+            severity, reason = 'high', matched
+        elif LOW.search(keyword_safe):
+            severity, reason = 'low', 'create-only statement'
+        else:
+            severity, reason = 'medium', 'manual review required'
+        result.append({'severity': severity, 'reason': reason, 'statement': display[:160]})
     return result
 
 def main():
@@ -74,7 +75,10 @@ def main():
         sql=Path(args.file).read_text(encoding='utf-8')
     except (OSError, UnicodeError) as error:
         cli.error(f'cannot read migration file: {error}')
-    findings=audit(sql)
+    try:
+        findings = audit(sql)
+    except ValueError as error:
+        cli.error(f'invalid SQL input: {error}')
     counts={level:sum(f['severity']==level for f in findings) for level in ('high', 'medium', 'low')}
     if args.format == 'json':
         print(json.dumps({'findings':findings,'high_risk':counts['high']},indent=2))
