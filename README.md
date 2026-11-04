@@ -1,35 +1,28 @@
 # Database Migration Auditor
 
-Revisor estático de scripts SQL para identificar comandos destrutivos e atribuir níveis de risco. **Não se conecta ao banco nem executa migrações.** Saída JSON e código de saída 2 quando há operações de alto risco.
+Auditor **estático e somente leitura** de arquivos SQL para identificar comandos destrutivos. Nunca abre conexões nem executa migrações.
 
-## Estado
+## Funcionalidades
 
-**MVP funcional / projeto inicial de portfólio.** Implementa o núcleo descrito abaixo, mas não é produto pronto para produção.
+- Classifica instruções como alto risco (ex.: `DROP TABLE`, `TRUNCATE`, `DELETE` ou `UPDATE` sem `WHERE`), baixo risco (`CREATE`) ou revisão manual.
+- O scanner reconhece **strings SQL entre aspas simples**, identificadores entre aspas duplas, aspas duplicadas, comentários `--` e `/* ... */`. Assim, `';'` dentro de uma string não é tratado como separador de comandos.
+- Strings e identificadores entre aspas são mascarados durante a detecção de palavras-chave: `UPDATE tabela SET descricao='WHERE'` continua sendo classificado como perigoso, pois `WHERE` aparece somente no valor de texto.
+- Recusa strings, identificadores e comentários de bloco não terminados, com erro legível na CLI.
+- Exporta resultados em JSON, resumo textual ou SARIF para uso em CI.
 
-## Como executar
+## Uso
 
 ```bash
 python audit.py examples/migration.sql
 python audit.py examples/migration.sql --format summary --fail-on medium
-```
-
-Por padrão, a CLI retorna JSON e encerra com código 2 quando encontra risco alto. `--fail-on` aceita `high`, `medium`, `low` ou `none` para definir o limiar do código de saída. `--format summary` apresenta contagens e achados em texto para leitura no terminal.
-
-## Testes
-
-```bash
+python audit.py examples/migration.sql --format sarif
 python -m unittest discover -s tests -v
 ```
 
-O GitHub Actions executa os testes automaticamente em pushes e pull requests.
+`--fail-on` aceita `high`, `medium`, `low` e `none`. O padrão é `high`; o processo termina com código 2 quando o limite configurado é atingido ou existe erro de entrada.
 
-## Segurança e limitações
+## Limitações importantes
 
-Parser educacional que divide por `;` (não entende strings com ponto-e-vírgula, procedures, SQL dinâmico nem todos os dialetos). Não equivale a parser PostgreSQL; revisão humana é obrigatória.
+O scanner **não é um parser SQL completo**: não entende todas as gramáticas e dialetos, comandos dinâmicos, funções/procedures, strings com escape `E'...'`, identificadores com crases, comentários de bloco aninhados ou blocos PostgreSQL `$$...$$`. Mesmo quando existe `WHERE`, isso não comprova que uma operação é segura. A saída SARIF é demonstrativa e ainda aponta localizações genéricas (linha 1). Não substitui revisão humana nem análise em ambiente isolado.
 
-## Evolução planejada
-
-Usar AST com sqlglot ou parser PostgreSQL, simulação de migrações em banco isolado e relatórios SARIF.
-
----
-Projeto de Engenharia de Software mantido na conta [juniordev830](https://github.com/juniordev830).
+Os exemplos são fictícios. Licença ainda não definida.
