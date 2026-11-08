@@ -129,7 +129,7 @@ def classify(statement: Statement) -> Rule:
         return RULES["UNRECOGNIZED"]
     first = words[0]
 
-    if first in ("EXEC", "EXECUTE") or "EXECUTE" in words and first == "DO":
+    if first in ("EXEC", "EXECUTE", "DO"):
         return RULES["DYN-SQL"]
     if first == "DROP":
         if len(words) > 1 and words[1] == "INDEX":
