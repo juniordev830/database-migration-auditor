@@ -166,6 +166,40 @@ class MigrationPlanTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertEqual(target.read_text(), "original")
 
+    def test_cli_never_overwrites_a_migration_with_its_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "V1__first.sql"
+            second = Path(directory) / "V2__second.sql"
+            original = b"DROP TABLE users;"
+            first.write_text("SELECT 1", encoding="utf-8")
+            second.write_bytes(original)
+            alias = Path(directory) / "alias.sql"
+            alias.hardlink_to(second)
+            for destination in (second, second.parent / "." / second.name, alias):
+                with self.subTest(destination=destination):
+                    second.write_bytes(original)
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPT), str(first), str(second),
+                         "--output", str(destination)], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("migration input", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(second.read_bytes(), original)
+
+    def test_cli_rejects_broken_output_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sql = Path(directory) / "V1__x.sql"
+            target = Path(directory) / "missing.txt"
+            link = Path(directory) / "link.txt"
+            sql.write_text("SELECT 1", encoding="utf-8")
+            link.symlink_to(target)
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(sql), "--output", str(link)],
+                capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(target.exists())
+            self.assertTrue(link.is_symlink())
+
 
 if __name__ == "__main__":
     unittest.main()

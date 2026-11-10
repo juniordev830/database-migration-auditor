@@ -57,8 +57,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             from pathlib import Path
             destination = Path(args.output)
-            if destination.exists() and destination.is_symlink():
+            if destination.is_symlink():
                 raise ValueError("refusing to overwrite a symlink")
+            if any(destination.resolve() == Path(source).resolve()
+                   or (destination.exists() and destination.samefile(source))
+                   for source in args.files):
+                raise ValueError("report output must not overwrite a migration input")
             destination.write_text(report, encoding="utf-8")
     except (ValueError, OSError, UnicodeError) as error:
         cli.error(str(error))
