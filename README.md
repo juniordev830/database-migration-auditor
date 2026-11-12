@@ -93,3 +93,7 @@ uma etapa de análise de código.
   tentar executar ou corrigir o SQL automaticamente.
 - Não carregue migrações de origem não confiável sem isolamento apropriado;
   embora não execute SQL, o processo lê arquivos locais.
+
+## Guia para contribuir
+
+Veja o [roteiro de testes e manutenção](docs/GUIA_DE_VALIDACAO.md) para validar mudanças com comandos e cenários específicos deste projeto.
