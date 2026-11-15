@@ -46,26 +46,34 @@ def _issue(migration: Migration, rule_id: str, reason: str,
     )
 
 
-def _object_after_table(statement: Statement) -> str | None:
+def _tables_in_statement(statement: Statement) -> list[str]:
     tokens = statement.tokens
-    for index, token in enumerate(tokens):
-        if token.upper != "TABLE":
-            continue
-        cursor = index + 1
-        if cursor + 1 < len(tokens) and tokens[cursor].upper == "IF":
+    cursor = 2  # Immediately after CREATE TABLE or DROP TABLE.
+    if cursor < len(tokens) and tokens[cursor].upper == "IF":
+        cursor += 1
+        if cursor < len(tokens) and tokens[cursor].upper == "NOT":
             cursor += 1
-            if cursor < len(tokens) and tokens[cursor].upper == "NOT":
-                cursor += 1
-            if cursor < len(tokens) and tokens[cursor].upper == "EXISTS":
-                cursor += 1
-        if cursor >= len(tokens) or not tokens[cursor].is_identifier:
-            return None
-        name = tokens[cursor].identifier()
-        if cursor + 2 < len(tokens) and tokens[cursor + 1].value == ".":
-            if tokens[cursor + 2].is_identifier:
-                name += "." + tokens[cursor + 2].identifier()
-        return name.casefold()
-    return None
+        if cursor >= len(tokens) or tokens[cursor].upper != "EXISTS":
+            return []
+        cursor += 1
+
+    names: list[str] = []
+    while cursor < len(tokens) and tokens[cursor].is_identifier:
+        parts = [tokens[cursor].identifier()]
+        cursor += 1
+        if cursor < len(tokens) and tokens[cursor].kind == "SYMBOL" and tokens[cursor].value == ".":
+            cursor += 1
+            if cursor >= len(tokens) or not tokens[cursor].is_identifier:
+                return []
+            parts.append(tokens[cursor].identifier())
+            cursor += 1
+
+        names.append(".".join(parts).casefold())
+        if cursor >= len(tokens) or tokens[cursor].kind != "SYMBOL" or tokens[cursor].value != ",":
+            return names
+        cursor += 1
+
+    return []
 
 
 def audit_plan(migrations: list[Migration], check_order: bool = True) -> list[Finding]:
@@ -111,13 +119,13 @@ def audit_plan(migrations: list[Migration], check_order: bool = True) -> list[Fi
             if len(words) < 2:
                 continue
             if words[0] == "DROP" and words[1] == "TABLE":
-                table = _object_after_table(statement)
-                if table is not None:
+                for table in _tables_in_statement(statement):
                     created_tables.pop(table, None)
             if words[0] == "CREATE" and words[1] == "TABLE":
-                table = _object_after_table(statement)
-                if table is None:
+                tables = _tables_in_statement(statement)
+                if not tables:
                     continue
+                table = tables[0]
                 if table in created_tables:
                     findings.append(_issue(
                         migration, "PLAN-DUPLICATE-TABLE",

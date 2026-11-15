@@ -59,6 +59,25 @@ class MigrationPlanTests(unittest.TestCase):
         findings = audit_plan(files)
         self.assertNotIn("PLAN-DUPLICATE-TABLE", [f.rule_id for f in findings])
 
+    def test_drop_list_clears_only_the_named_tables(self):
+        files = [
+            Migration(
+                "V1__initial.sql",
+                'CREATE TABLE public.customers(id int); '
+                'CREATE TABLE "public"."orders,archive"(id int); '
+                'CREATE TABLE untouched(id int);',
+            ),
+            Migration(
+                "V2__recreate.sql",
+                'DROP TABLE IF EXISTS public.customers, "public"."orders,archive" CASCADE; '
+                'CREATE TABLE public.customers(id int); '
+                'CREATE TABLE "public"."orders,archive"(id int); '
+                'CREATE TABLE untouched(id int);',
+            ),
+        ]
+        repeated = [f.reason for f in audit_plan(files) if f.rule_id == "PLAN-DUPLICATE-TABLE"]
+        self.assertEqual(repeated, ["table created more than once: untouched"])
+
     def test_quoted_schema_qualified_table_names(self):
         files = [
             Migration("V1__first.sql", 'CREATE TABLE "public"."Customers"(id int)'),
