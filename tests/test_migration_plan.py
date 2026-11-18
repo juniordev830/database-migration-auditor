@@ -86,6 +86,17 @@ class MigrationPlanTests(unittest.TestCase):
         findings = audit_plan(files)
         self.assertIn("PLAN-DUPLICATE-TABLE", [f.rule_id for f in findings])
 
+    def test_literal_dot_in_table_name_is_not_a_schema_separator(self):
+        files = [
+            Migration("V1__initial.sql", 'CREATE TABLE "archive.users"(id int)'),
+            Migration("V2__schema.sql", "CREATE TABLE archive.users(id int)"),
+            Migration("V3__drop_literal.sql", 'DROP TABLE "archive.users"'),
+            Migration("V4__repeat_schema.sql", "CREATE TABLE archive.users(id int)"),
+        ]
+        repeats = [finding.file for finding in audit_plan(files)
+                   if finding.rule_id == "PLAN-DUPLICATE-TABLE"]
+        self.assertEqual(repeats, ["V4__repeat_schema.sql"])
+
     def test_duplicate_file_path_is_flagged(self):
         file = Migration("V1__init.sql", "SELECT 1")
         findings = audit_plan([file, file])
