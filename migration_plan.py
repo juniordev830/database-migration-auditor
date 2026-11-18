@@ -46,7 +46,7 @@ def _issue(migration: Migration, rule_id: str, reason: str,
     )
 
 
-def _tables_in_statement(statement: Statement) -> list[str]:
+def _tables_in_statement(statement: Statement) -> list[tuple[str, ...]]:
     tokens = statement.tokens
     cursor = 2  # Immediately after CREATE TABLE or DROP TABLE.
     if cursor < len(tokens) and tokens[cursor].upper == "IF":
@@ -57,7 +57,7 @@ def _tables_in_statement(statement: Statement) -> list[str]:
             return []
         cursor += 1
 
-    names: list[str] = []
+    names: list[tuple[str, ...]] = []
     while cursor < len(tokens) and tokens[cursor].is_identifier:
         parts = [tokens[cursor].identifier()]
         cursor += 1
@@ -68,7 +68,7 @@ def _tables_in_statement(statement: Statement) -> list[str]:
             parts.append(tokens[cursor].identifier())
             cursor += 1
 
-        names.append(".".join(parts).casefold())
+        names.append(tuple(part.casefold() for part in parts))
         if cursor >= len(tokens) or tokens[cursor].kind != "SYMBOL" or tokens[cursor].value != ",":
             return names
         cursor += 1
@@ -83,7 +83,7 @@ def audit_plan(migrations: list[Migration], check_order: bool = True) -> list[Fi
     findings: list[Finding] = []
     versions: dict[tuple[int, ...], str] = {}
     names: set[str] = set()
-    created_tables: dict[str, str] = {}
+    created_tables: dict[tuple[str, ...], str] = {}
     previous_version: tuple[int, ...] | None = None
 
     for migration in migrations:
@@ -129,7 +129,7 @@ def audit_plan(migrations: list[Migration], check_order: bool = True) -> list[Fi
                 if table in created_tables:
                     findings.append(_issue(
                         migration, "PLAN-DUPLICATE-TABLE",
-                        "table created more than once: " + table,
+                        "table created more than once: " + ".".join(table),
                         "medium", "Use a reviewed migration order or explicit idempotency.",
                         statement.line))
                 created_tables[table] = migration.name
