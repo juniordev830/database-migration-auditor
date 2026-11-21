@@ -124,6 +124,27 @@ class MigrationPlanTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_migrations([str(file)], max_bytes=0)
 
+    def test_loader_rejects_noninteger_or_boolean_byte_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sql = Path(directory) / "V1__x.sql"
+            sql.write_text("SELECT 1", encoding="utf-8")
+            for limit in (False, True, None, "2048", 1.5, float("nan")):
+                with self.subTest(limit=limit), self.assertRaisesRegex(ValueError, "file size limit"):
+                    load_migrations([str(sql)], max_bytes=limit)
+
+    def test_loader_enforces_raw_byte_limit_for_multibyte_utf8(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sql = Path(directory) / "V1__utf8.sql"
+            sql.write_text("-- Ação\nSELECT 1;", encoding="utf-8")
+            size = len(sql.read_bytes())
+            self.assertEqual(load_migrations([str(sql)], max_bytes=size)[0].sql,
+                             sql.read_text(encoding="utf-8"))
+            with self.assertRaisesRegex(ValueError, "size limit"):
+                load_migrations([str(sql)], max_bytes=size - 1)
+            sql.write_bytes(b"SELECT \xff;")
+            with self.assertRaisesRegex(ValueError, "cannot read migration"):
+                load_migrations([str(sql)])
+
     def test_missing_file_is_readable_error(self):
         with self.assertRaisesRegex(ValueError, "not found"):
             load_migrations(["nonexistent.sql"])

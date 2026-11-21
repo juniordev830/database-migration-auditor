@@ -97,3 +97,5 @@ uma etapa de análise de código.
 ## Guia para contribuir
 
 Veja o [roteiro de testes e manutenção](docs/GUIA_DE_VALIDACAO.md) para validar mudanças com comandos e cenários específicos deste projeto.
+
+`load_migrations()` aplica o limite configurado aos bytes reais lidos, antes da decodificação UTF-8, e lê no máximo `limite + 1` bytes mesmo se o arquivo crescer. Limites nulos, booleanos ou fracionários são rejeitados. Isso evita análises de tamanho ilimitado em integrações com a biblioteca.

@@ -143,20 +143,24 @@ def load_migrations(paths: list[str], max_bytes: int = 2_000_000) -> list[Migrat
         raise ValueError("at least one migration file is required")
     if len(paths) > 1000:
         raise ValueError("too many migration paths")
-    if max_bytes < 1 or max_bytes > 50_000_000:
+    if type(max_bytes) is not int or not 1 <= max_bytes <= 50_000_000:
         raise ValueError("invalid file size limit")
     migrations = []
     for path in paths:
         file = Path(path)
         if not file.is_file():
             raise ValueError("migration file not found: " + path)
-        if file.stat().st_size > max_bytes:
+        try:
+            # The limit also holds if the file grows after metadata inspection.
+            with file.open("rb") as handle:
+                raw = handle.read(max_bytes + 1)
+        except OSError as error:
+            raise ValueError("cannot read migration: " + path) from error
+        if len(raw) > max_bytes:
             raise ValueError("migration exceeds size limit: " + path)
         try:
-            sql = file.read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as error:
+            sql = raw.decode("utf-8")
+        except UnicodeError as error:
             raise ValueError("cannot read migration: " + path) from error
-        if len(sql) > max_bytes:
-            raise ValueError("migration exceeds character limit: " + path)
         migrations.append(Migration(path, sql))
     return migrations
