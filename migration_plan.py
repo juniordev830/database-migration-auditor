@@ -143,7 +143,7 @@ def load_migrations(paths: list[str], max_bytes: int = 2_000_000) -> list[Migrat
         raise ValueError("at least one migration file is required")
     if len(paths) > 1000:
         raise ValueError("too many migration paths")
-    if max_bytes < 1 or max_bytes > 50_000_000:
+    if type(max_bytes) is not int or not 1 <= max_bytes <= 50_000_000:
         raise ValueError("invalid file size limit")
     migrations = []
     for path in paths:
