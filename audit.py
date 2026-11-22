@@ -62,6 +62,9 @@ def audit(sql: str) -> list[dict[str,str]]:
         result.append({'severity':severity,'reason':reason,'statement':normalized[:160]})
     return result
 
+MAX_SQL_BYTES = 5 * 1024 * 1024
+
+
 def main():
     cli=argparse.ArgumentParser(description='Read-only SQL migration audit')
     cli.add_argument('file', help='SQL migration file')
@@ -71,8 +74,12 @@ def main():
                      help='output format (default: json)')
     args=cli.parse_args()
     try:
-        sql=Path(args.file).read_text(encoding='utf-8')
-    except (OSError, UnicodeError) as error:
+        with Path(args.file).open('rb') as stream:
+            raw = stream.read(MAX_SQL_BYTES + 1)
+        if len(raw) > MAX_SQL_BYTES:
+            raise ValueError('migration file exceeds 5 MiB safety limit')
+        sql = raw.decode('utf-8')
+    except (OSError, UnicodeError, ValueError) as error:
         cli.error(f'cannot read migration file: {error}')
     findings=audit(sql)
     counts={level:sum(f['severity']==level for f in findings) for level in ('high', 'medium', 'low')}
