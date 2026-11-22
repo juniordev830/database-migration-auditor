@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from sql_lexer import split_statements, redact_literals
 
 HIGH = [
     (re.compile(r'^DROP\s+(?:TABLE|DATABASE|SCHEMA)\b', re.I), 'destructive drop'),
@@ -34,7 +35,7 @@ def sarif_report(findings: list[dict[str, str]], artifact: str) -> dict:
             'locations': [{
                 'physicalLocation': {
                     'artifactLocation': {'uri': artifact},
-                    'region': {'startLine': 1},
+                    'region': {'startLine': int(finding.get('line', 1))},
                 }
             }],
         })
@@ -48,18 +49,15 @@ def sarif_report(findings: list[dict[str, str]], artifact: str) -> dict:
     }
 
 def audit(sql: str) -> list[dict[str,str]]:
-    # Training parser: SQL comments removed; semicolons in string literals are unsupported.
-    cleaned = re.sub(r'/\*.*?\*/|--[^\n]*', '', sql, flags=re.S)
+    # Use the shared lexer: comments and quoted semicolons must not hide SQL.
     result=[]
-    for raw in cleaned.split(';'):
-        statement=raw.strip()
-        if not statement: continue
-        normalized=' '.join(statement.split())
+    for statement in split_statements(sql):
+        normalized=redact_literals(statement, limit=160)
         matched=next((reason for pattern,reason in HIGH if pattern.search(normalized)),None)
         if matched: severity,reason='high',matched
         elif LOW.search(normalized): severity,reason='low','create-only statement'
         else: severity,reason='medium','manual review required'
-        result.append({'severity':severity,'reason':reason,'statement':normalized[:160]})
+        result.append({'severity':severity,'reason':reason,'statement':normalized[:160], 'line':statement.line})
     return result
 
 MAX_SQL_BYTES = 5 * 1024 * 1024
@@ -81,7 +79,10 @@ def main():
         sql = raw.decode('utf-8')
     except (OSError, UnicodeError, ValueError) as error:
         cli.error(f'cannot read migration file: {error}')
-    findings=audit(sql)
+    try:
+        findings=audit(sql)
+    except ValueError as error:
+        cli.error(f'cannot parse migration file: {error}')
     counts={level:sum(f['severity']==level for f in findings) for level in ('high', 'medium', 'low')}
     if args.format == 'json':
         print(json.dumps({'findings':findings,'high_risk':counts['high']},indent=2))
