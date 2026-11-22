@@ -35,7 +35,7 @@ def sarif_report(findings: list[dict[str, str]], artifact: str) -> dict:
             'locations': [{
                 'physicalLocation': {
                     'artifactLocation': {'uri': artifact},
-                    'region': {'startLine': 1},
+                    'region': {'startLine': int(finding.get('line', 1))},
                 }
             }],
         })
@@ -57,7 +57,7 @@ def audit(sql: str) -> list[dict[str,str]]:
         if matched: severity,reason='high',matched
         elif LOW.search(normalized): severity,reason='low','create-only statement'
         else: severity,reason='medium','manual review required'
-        result.append({'severity':severity,'reason':reason,'statement':normalized[:160]})
+        result.append({'severity':severity,'reason':reason,'statement':normalized[:160], 'line':statement.line})
     return result
 
 MAX_SQL_BYTES = 5 * 1024 * 1024
